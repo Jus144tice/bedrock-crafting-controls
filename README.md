@@ -1,10 +1,16 @@
 # Bedrock Crafting Controls
 
-A small, **client-side** quality-of-life mod for **Minecraft Java Edition 1.21.1** on **NeoForge**
-that recreates Bedrock-style crafting controls in the vanilla crafting-table recipe book.
+A small, **client-side** quality-of-life mod that recreates Bedrock-style crafting controls in the
+vanilla crafting table.
 
-> Client-only. It does **not** need to be installed on the server and is designed to work on
-> vanilla servers and alongside other client mods.
+## Requires
+
+- **Minecraft: Java Edition 1.21.1**
+- **NeoForge** (21.1.x, for 1.21.1)
+- **Java 21** — bundled by the Minecraft launcher; only needed on its own if you build from source
+
+> **Client-only.** Install it on your client only — it does **not** need to be on the server, works on
+> vanilla servers, and runs fine alongside other client mods.
 
 ---
 
@@ -169,8 +175,8 @@ build/libs/bedrockcraftingcontrols-1.0.0.jar
 
 ## Testing checklist
 
-This mod **compiles**, but the recipe-click behavior relies on vanilla container networking and
-**needs in-game verification**. Suggested checks:
+Handy checks when validating a release or bringing the mod to a new Minecraft / NeoForge version
+(the recipe-click behavior relies on vanilla container networking, so it's worth a quick in-game pass):
 
 - [ ] Singleplayer crafting table: **normal-click** a recipe → grid is populated with one set, output
       shows a preview, nothing is crafted into inventory yet.
