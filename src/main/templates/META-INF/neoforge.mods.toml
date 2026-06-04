@@ -1,0 +1,44 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+issueTrackerURL = "https://github.com/Jus144tice/bedrock-crafting-controls/issues"
+
+[[mods]]
+modId = "bedrockcraftingcontrols"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
+logoFile = "bedrockcraftingcontrols.png"
+displayURL = "https://github.com/Jus144tice/bedrock-crafting-controls"
+description = '''
+Client-side quality-of-life mod that recreates Bedrock-style crafting controls in the
+vanilla crafting table recipe book.
+
+  * Normal-click a recipe -> load the grid only (no craft).
+  * Shift-click a recipe   -> craft up to a stack of the result into your inventory.
+  * Shift-click the output -> craft as many as your inventory allows (Bedrock-style).
+  * Normal-click the output -> craft onto your cursor and keep the grid stocked, so you can keep
+    clicking to pile up to a stack (Bedrock-style).
+
+Client-only. Does not need to be installed on the server and works on vanilla servers.
+'''
+
+# --- Mixins -----------------------------------------------------------------
+# The single Mixin below is what intercepts the recipe-book click. It is client-only.
+[[mixins]]
+config = "bedrockcraftingcontrols.mixins.json"
+
+# --- Dependencies -----------------------------------------------------------
+[[dependencies.bedrockcraftingcontrols]]
+modId = "neoforge"
+type = "required"
+versionRange = "${neo_version_range}"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.bedrockcraftingcontrols]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "CLIENT"
