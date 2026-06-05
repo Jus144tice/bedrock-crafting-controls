@@ -339,4 +339,51 @@ class RecipeClickPolicyTest {
             assertEquals(1, RecipeClickPolicy.stackCraftCount(-3, 64));
         }
     }
+
+    @Nested
+    @DisplayName("capping the craft count to what the inventory can afford")
+    class CappedCraftCount {
+
+        @Test
+        @DisplayName("plenty of materials -> craft the whole stack target")
+        void enoughMaterials() {
+            assertEquals(16, RecipeClickPolicy.cappedCraftCount(16, 20)); // afford 20, only need 16
+        }
+
+        @Test
+        @DisplayName("short on materials -> craft only what's affordable (no wasted no-ops)")
+        void shortOnMaterials() {
+            assertEquals(10, RecipeClickPolicy.cappedCraftCount(16, 10)); // a stack wants 16, can do 10
+            assertEquals(3, RecipeClickPolicy.cappedCraftCount(64, 3));
+        }
+
+        @Test
+        @DisplayName("exact materials -> craft exactly that many")
+        void exactMaterials() {
+            assertEquals(16, RecipeClickPolicy.cappedCraftCount(16, 16));
+        }
+
+        @Test
+        @DisplayName("nothing affordable -> 0 (Mixin then defers to vanilla / ghost recipe)")
+        void nothingAffordable() {
+            assertEquals(0, RecipeClickPolicy.cappedCraftCount(16, 0));
+            assertEquals(0, RecipeClickPolicy.cappedCraftCount(16, -1));
+            assertEquals(0, RecipeClickPolicy.cappedCraftCount(0, 5));
+        }
+
+        @Test
+        @DisplayName("never exceeds either bound")
+        void neverExceedsEitherBound() {
+            int[] targets = {1, 4, 16, 64};
+            int[] affords = {0, 1, 5, 16, 64, 999};
+            for (int t : targets) {
+                for (int a : affords) {
+                    int c = RecipeClickPolicy.cappedCraftCount(t, a);
+                    assertTrue(c >= 0, "never negative");
+                    assertTrue(c <= t, "never more than the stack target");
+                    assertTrue(c <= Math.max(0, a), "never more than affordable");
+                }
+            }
+        }
+    }
 }

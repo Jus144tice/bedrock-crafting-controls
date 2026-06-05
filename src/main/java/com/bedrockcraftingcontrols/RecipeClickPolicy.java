@@ -65,6 +65,23 @@ public final class RecipeClickPolicy {
     }
 
     /**
+     * Cap the desired stack-craft count to how many sets the inventory can actually supply, so the
+     * Mixin doesn't fire off no-op craft packets once the materials run out. {@code affordableSets}
+     * comes from the game (the same availability count vanilla uses); this is just the bounded
+     * arithmetic, kept here so it can be unit-tested.
+     *
+     * @param stackTarget how many crafts a full stack of the result would take ({@link #stackCraftCount})
+     * @param affordableSets how many sets the inventory can craft (0 if none)
+     * @return the number of crafts to actually run; {@code 0} means "craft nothing, leave it to vanilla"
+     */
+    public static int cappedCraftCount(int stackTarget, int affordableSets) {
+        if (stackTarget <= 0 || affordableSets <= 0) {
+            return 0;
+        }
+        return Math.min(stackTarget, affordableSets);
+    }
+
+    /**
      * Decide whether a click on the crafting <em>output</em> slot should be intercepted and turned
      * into a Bedrock-style "craft as many as the inventory allows" (re-fill the grid from inventory,
      * then craft everything in it). Vanilla only crafts whatever sets already sit in the grid.

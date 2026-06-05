@@ -9,6 +9,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingMenu;
@@ -31,11 +32,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@link RecipeClickPolicy}.
  *
  * <p><strong>1. Shift-click a recipe → craft up to a stack of the result</strong> (replaces vanilla
- * bulk-fill). In {@code handlePlaceRecipe} we repeat, {@code stackCraftCount} times: (a)
+ * bulk-fill). In {@code handlePlaceRecipe} we repeat, {@code crafts} times: (a)
  * {@code handlePlaceRecipe(id, recipe, false)} to place one set, then (b)
  * {@code handleInventoryMouseClick(id, 0, 0, QUICK_MOVE, player)} to quick-move that one set's result.
- * The count is {@code floor(resultMaxStack / yieldPerCraft)} so the total is up to one stack (a pickaxe
- * → 1, torches → 64); once the inventory runs out of materials the extra iterations simply no-op.
+ * The count is {@code stackCraftCount} = {@code floor(resultMaxStack / yieldPerCraft)} (a pickaxe → 1,
+ * torches → 64), then capped by {@code StackedContents#getBiggestCraftableStack} to the sets the
+ * inventory can actually supply ({@code cappedCraftCount}) so no no-op craft packets are sent once
+ * materials run out. Even so, vanilla's placement is all-or-nothing per recipe (it never places a
+ * partial set), so a half-empty grid can never craft the wrong item.
  *
  * <p><strong>2. Shift-click the output → craft the max from inventory</strong> (Bedrock-style;
  * vanilla only crafts the sets already in the grid). In {@code handleInventoryMouseClick} we (a)
@@ -110,17 +114,29 @@ public abstract class MultiPlayerGameModeMixin {
             return; // -> vanilla
         }
 
-        // Craft enough single sets to fill one stack of the result (Bedrock-style). One craft yields
-        // the recipe's output count; floor(maxStack / yield) crafts keep the total within a stack.
+        // How many crafts a full stack of the result would take (Bedrock-style). One craft yields the
+        // recipe's output count; floor(maxStack / yield) keeps the total within a stack.
         ItemStack result = recipe.value().getResultItem(player.registryAccess());
-        int crafts = RecipeClickPolicy.stackCraftCount(result.getCount(), result.getMaxStackSize());
+        int target = RecipeClickPolicy.stackCraftCount(result.getCount(), result.getMaxStackSize());
+
+        // Cap that to how many sets the inventory can actually supply, so we never fire no-op craft
+        // packets once materials run out. getBiggestCraftableStack is the same availability check the
+        // server uses (counts the main inventory). It's a conservative bound — it ignores items
+        // already sitting in the grid — so it never over-runs the server, at worst stopping a craft or
+        // two short of a hand-stocked grid.
+        StackedContents contents = new StackedContents();
+        player.getInventory().fillStackedContents(contents);
+        int affordable = contents.getBiggestCraftableStack(recipe, null);
+        int crafts = RecipeClickPolicy.cappedCraftCount(target, affordable);
+        if (crafts <= 0) {
+            return; // nothing craftable right now -> let vanilla run (it shows the ghost recipe)
+        }
 
         MultiPlayerGameMode self = (MultiPlayerGameMode) (Object) this;
         bcc$reentrant = true;
         try {
             for (int i = 0; i < crafts; i++) {
                 // Place ONE set, then quick-move the result once -> crafts exactly that set's output.
-                // When the inventory runs dry these two calls become harmless server-side no-ops.
                 self.handlePlaceRecipe(containerId, recipe, false);
                 self.handleInventoryMouseClick(containerId, RESULT_SLOT_INDEX, 0, ClickType.QUICK_MOVE, player);
             }
@@ -130,8 +146,9 @@ public abstract class MultiPlayerGameModeMixin {
 
         if (BedrockCraftingControls.DEBUG) {
             BedrockCraftingControls.LOGGER.debug(
-                    "[BCC] shift-click recipe -> crafted up to a stack ({} crafts, container {}, menu {})",
+                    "[BCC] shift-click recipe -> crafted up to a stack ({}/{} crafts, container {}, menu {})",
                     crafts,
+                    target,
                     containerId,
                     menu.getClass().getSimpleName());
         }

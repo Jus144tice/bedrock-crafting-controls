@@ -59,6 +59,30 @@ hand-filled grids, not just book-loaded ones).
 | `CraftingInput#of` | `static CraftingInput of(int width, int height, List<ItemStack> items)` | Row-major item list. Not deprecated in 1.21.1. |
 | `RecipeType.CRAFTING` | `RecipeType<CraftingRecipe> CRAFTING` | The crafting recipe type constant. |
 | `Recipe#getResultItem` | `ItemStack getResultItem(HolderLookup.Provider registries)` | Result `ItemStack`: `getCount()` is the per-craft yield, `getMaxStackSize()` the stack cap. Used by feature 1's `stackCraftCount`. Get `registries` from `player.registryAccess()` (declared on `Entity`). Not deprecated in 1.21.1. |
+| `StackedContents#getBiggestCraftableStack` | `int getBiggestCraftableStack(RecipeHolder<?> recipe, @Nullable IntList)` | Max number of **sets** (crafts) the contents can supply. Fill it client-side with `player.getInventory().fillStackedContents(stackedContents)` (counts the 36 main slots only). Feature 1 caps its loop to this so it stops once materials run out. |
+
+## Why feature 1's craft loop is safe (no wrong item, no loss/dupe)
+
+Feature 1 loops "place one set + quick-move the result." Each placement is a `ServerboundPlaceRecipePacket`
+the server runs through `net.minecraft.recipebook.ServerPlaceRecipe#recipeClicked`, which is **gated
+and all-or-nothing**:
+
+- It only proceeds `if (testClearGrid() || isCreative())` — `testClearGrid()` returns `false` when the
+  grid's current contents couldn't fit back into the inventory, so it bails rather than risk dropping
+  items.
+- It then checks `stackedContents.canCraft(recipe, null)` — "do I have a *full* set?". If **any**
+  ingredient is missing it takes the else branch: `clearGrid()` (empties the grid back to inventory)
+  and sends a ghost-recipe packet. It **never** places a partial set.
+
+Consequences for the loop:
+- **One ingredient runs out →** the next placement places nothing and *clears* the grid, so the
+  result-slot quick-move has nothing to craft. A half-empty grid can never accidentally match a
+  different recipe and craft the wrong thing.
+- **Inventory full →** the quick-move can't move the result, so `ResultSlot#onTake` never fires and the
+  ingredients are not consumed. No craft, no loss, no duplication (and `testClearGrid` prevents drops).
+
+So the loop relies on the server's guards for correctness; the client-side cap
+(`getBiggestCraftableStack`) is purely a packet-count optimization.
 
 ## Why this is network-safe
 

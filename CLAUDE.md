@@ -42,13 +42,16 @@ deps). A `bcc$reentrant` flag guards the internal vanilla calls so the two featu
 each other.
 
 **Feature 1 — `handlePlaceRecipe` hook (`shouldCraftStack`).** When shift is held on an affected
-menu, the count `RecipeClickPolicy#stackCraftCount(result.getCount(), result.getMaxStackSize())` is
-computed from the recipe's result (`recipe.value().getResultItem(player.registryAccess())`), and we
-loop that many times:
+menu, the stack target `RecipeClickPolicy#stackCraftCount(result.getCount(), result.getMaxStackSize())`
+is computed from the recipe's result (`recipe.value().getResultItem(player.registryAccess())`), then
+**capped to the sets the inventory can supply** via `StackedContents#getBiggestCraftableStack` →
+`RecipeClickPolicy#cappedCraftCount` (so no no-op packets are sent once materials run out; `0` → defer
+to vanilla / ghost). We loop that many times:
 1. `handlePlaceRecipe(id, recipe, false)` → places **one** ingredient set, then
 2. `handleInventoryMouseClick(id, 0, 0, QUICK_MOVE, player)` → quick-moves that one set's result.
-Each loop crafts one set's worth; `floor(maxStack / yield)` loops keep the total within one stack.
-When the inventory runs dry the remaining iterations are harmless server-side no-ops.
+Vanilla placement is **all-or-nothing per recipe** (a missing ingredient clears the grid instead of
+placing a partial set), so the loop can never craft the wrong item and never loses/dupes on a full
+inventory — see [`docs/vanilla-hooks.md`](docs/vanilla-hooks.md).
 
 Both output features below need the recipe to re-place it. We don't cache the book click; instead
 `bcc$resolveGridRecipe` looks it up from whatever is **currently in the grid** (slots `1..N`, result
@@ -146,6 +149,8 @@ after a Gradle sync. The hook points below were verified this way.
 | `doClick` QUICK_MOVE loop | `net.minecraft.world.inventory.AbstractContainerMenu` | one shift-click on the result loops `quickMoveStack` until the grid is depleted → crafts all sets in the grid |
 | `doClick` PICKUP result branch | `net.minecraft.world.inventory.AbstractContainerMenu` | clicking the result with a matching cursor does `cursor.grow(maxStack - count)` → vanilla already accumulates onto the cursor; feature 3 only re-stocks the grid so this can repeat |
 | `getRecipeFor(RecipeType, RecipeInput, Level)` | `net.minecraft.world.item.crafting.RecipeManager` (client: `Level#getRecipeManager`) | resolve the recipe from grid contents (`CraftingInput.of(w, h, slots)`) for features 2 & 3; works on the client since recipes are synced |
+| `getBiggestCraftableStack(RecipeHolder, IntList)` | `net.minecraft.world.entity.player.StackedContents` (fill via `Inventory#fillStackedContents`) | count how many sets the inventory can craft → caps feature 1's loop; client-usable, counts the main inventory only |
+| `recipeClicked` `canCraft` gate | `net.minecraft.recipebook.ServerPlaceRecipe` | proves placement is all-or-nothing: missing an ingredient → `clearGrid()` + ghost, never a partial set (why the loop is safe) |
 | `RESULT_SLOT = 0` | `net.minecraft.world.inventory.CraftingMenu` / `InventoryMenu` | result slot index (both = 0) |
 | `handlePlaceRecipe(..., Screen.hasShiftDown())` call site | `net.minecraft.client.gui.screens.recipebook.RecipeBookComponent` | proves shift maps to the bool arg |
 

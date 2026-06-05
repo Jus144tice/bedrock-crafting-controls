@@ -3,6 +3,19 @@
 All notable changes to Bedrock Crafting Controls are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **Shift-click-a-recipe now stops as soon as your materials run out.** The craft count is capped to
+  the sets your inventory can actually supply (`StackedContents#getBiggestCraftableStack`, the same
+  availability check the server uses), so it no longer fires a burst of no-op craft packets past the
+  point of running dry. Added pure, unit-tested `RecipeClickPolicy#cappedCraftCount`.
+  - Behavior is unchanged in the common case (you still get a full stack, or exactly as many as you
+    can afford) — this only trims wasted network traffic. Correctness was already guaranteed by
+    vanilla's all-or-nothing placement (a missing ingredient clears the grid rather than placing a
+    partial set, so it can never craft the wrong item; a full inventory simply no-ops without losing
+    or duplicating items).
+
 ## [1.0.0] - 2026-06-04
 
 First public release for **Minecraft 1.21.1 / NeoForge 21.1.x**, client-only. Three Bedrock-style

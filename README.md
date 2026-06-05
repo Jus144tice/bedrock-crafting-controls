@@ -47,13 +47,16 @@ Everything goes through the **normal vanilla networking path** (`ServerboundPlac
 
 The mod figures out how many crafts make one stack of the result —
 `floor(resultMaxStackSize / yieldPerCraft)` (so 4-per-craft torches → 16 crafts → 64 torches; a
-1-stack pickaxe → 1 craft) — then repeats, that many times:
+1-stack pickaxe → 1 craft) — then **caps that to how many sets your inventory can actually supply**,
+and repeats that many times:
 
 1. Places **one** set of ingredients into the grid (the normal, non-bulk placement), then
 2. Shift-clicks the **result slot once** (crafts that one set's output).
 
-Once your inventory runs out of materials the remaining repeats are harmless no-ops, so you always get
-"up to a stack, or as many as you could afford."
+So you get a full stack when you have the materials, or exactly as many as you can afford — and it
+stops there instead of firing off wasted crafts. It also can't ever craft the wrong thing: vanilla's
+placement is all-or-nothing per recipe, so if an ingredient runs out the grid is cleared rather than
+left holding a partial pattern.
 
 The two **output**-slot features below figure out which recipe is in the grid by looking it up from
 the grid contents — so they work whether you auto-filled it from the recipe book **or placed the
@@ -147,10 +150,10 @@ auto-detection / download (the `foojay-resolver` plugin is configured to provisi
 The built jar is written to:
 
 ```
-build/libs/bedrockcraftingcontrols-1.0.0.jar
+build/libs/bedrockcraftingcontrols-<version>.jar
 ```
 
-(`bedrockcraftingcontrols` is the `archivesName`; the version comes from `gradle.properties`.)
+(`bedrockcraftingcontrols` is the `archivesName`; the version comes from `mod_version` in `gradle.properties`.)
 
 ### Running in a dev client
 
