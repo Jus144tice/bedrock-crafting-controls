@@ -386,4 +386,58 @@ class RecipeClickPolicyTest {
             }
         }
     }
+
+    @Nested
+    @DisplayName("place-all cycles needed to drain the inventory")
+    class PlaceAllCycles {
+
+        @Test
+        @DisplayName("a stack-or-less fits in one cycle")
+        void oneCycle() {
+            assertEquals(1, RecipeClickPolicy.placeAllCycles(1, 64));
+            assertEquals(1, RecipeClickPolicy.placeAllCycles(64, 64));
+        }
+
+        @Test
+        @DisplayName("more than one grid's worth needs multiple cycles (the oak-logs case)")
+        void multipleCycles() {
+            assertEquals(2, RecipeClickPolicy.placeAllCycles(65, 64)); // 1 over a stack -> 2 cycles
+            assertEquals(2, RecipeClickPolicy.placeAllCycles(128, 64)); // 128 logs of planks -> 2
+            assertEquals(4, RecipeClickPolicy.placeAllCycles(200, 64)); // a "ton" of logs -> 4
+        }
+
+        @Test
+        @DisplayName("a smaller limiting-ingredient stack means more cycles")
+        void smallerPerCycleCap() {
+            assertEquals(3, RecipeClickPolicy.placeAllCycles(40, 16)); // ceil(40/16) = 3
+        }
+
+        @Test
+        @DisplayName("nothing affordable -> 0 cycles")
+        void nothingAffordable() {
+            assertEquals(0, RecipeClickPolicy.placeAllCycles(0, 64));
+            assertEquals(0, RecipeClickPolicy.placeAllCycles(-5, 64));
+        }
+
+        @Test
+        @DisplayName("a degenerate per-cycle cap is clamped to at least 1")
+        void degeneratePerCycle() {
+            assertEquals(100, RecipeClickPolicy.placeAllCycles(100, 0));
+            assertEquals(100, RecipeClickPolicy.placeAllCycles(100, -3));
+        }
+
+        @Test
+        @DisplayName("always enough cycles to cover everything, never wildly too many")
+        void coversWithoutOverkill() {
+            int[] affords = {1, 5, 63, 64, 65, 128, 200, 999};
+            int[] caps = {1, 16, 64};
+            for (int a : affords) {
+                for (int cap : caps) {
+                    int cycles = RecipeClickPolicy.placeAllCycles(a, cap);
+                    assertTrue((long) cycles * cap >= a, "cycles*cap covers the affordable amount");
+                    assertTrue((long) (cycles - 1) * cap < a, "no wasted extra cycle");
+                }
+            }
+        }
+    }
 }

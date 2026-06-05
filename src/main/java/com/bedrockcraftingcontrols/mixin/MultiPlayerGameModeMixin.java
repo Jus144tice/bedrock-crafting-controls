@@ -14,8 +14,10 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
@@ -45,7 +47,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * vanilla only crafts the sets already in the grid). In {@code handleInventoryMouseClick} we (a)
  * {@code handlePlaceRecipe(id, recipe, true)} so the server re-fills the grid with as many sets as the
  * inventory allows, then (b) quick-move the result once — {@code AbstractContainerMenu#doClick} loops
- * {@code quickMoveStack} until the grid is depleted, crafting everything we just placed.
+ * {@code quickMoveStack} until the grid is depleted, crafting everything we just placed. Because a
+ * single place-all only fills one stack per ingredient slot (≈64 sets), we repeat that pair
+ * {@code RecipeClickPolicy#placeAllCycles} times so one click drains the whole inventory, not just the
+ * first grid's worth.
  *
  * <p><strong>3. Normal-click the output → craft to cursor and keep the grid stocked</strong>
  * (Bedrock-style; vanilla empties the grid after one craft). In {@code handleInventoryMouseClick} we
@@ -119,14 +124,9 @@ public abstract class MultiPlayerGameModeMixin {
         ItemStack result = recipe.value().getResultItem(player.registryAccess());
         int target = RecipeClickPolicy.stackCraftCount(result.getCount(), result.getMaxStackSize());
 
-        // Cap that to how many sets the inventory can actually supply, so we never fire no-op craft
-        // packets once materials run out. getBiggestCraftableStack is the same availability check the
-        // server uses (counts the main inventory). It's a conservative bound — it ignores items
-        // already sitting in the grid — so it never over-runs the server, at worst stopping a craft or
-        // two short of a hand-stocked grid.
-        StackedContents contents = new StackedContents();
-        player.getInventory().fillStackedContents(contents);
-        int affordable = contents.getBiggestCraftableStack(recipe, null);
+        // Cap that to how many sets are actually available, so we never fire no-op craft packets once
+        // materials run out. bcc$affordableSets mirrors the server's own availability check.
+        int affordable = bcc$affordableSets(menu, player, recipe);
         int crafts = RecipeClickPolicy.cappedCraftCount(target, affordable);
         if (crafts <= 0) {
             return; // nothing craftable right now -> let vanilla run (it shows the ghost recipe)
@@ -215,20 +215,27 @@ public abstract class MultiPlayerGameModeMixin {
 
         // Feature 2 — shift-click (quick-move) the output: craft the max the inventory allows.
         if (wantsCraftMax) {
+            // One placeAll only fills the grid with a stack per slot, so a single placeAll+quick-move
+            // crafts at most ~64 sets. Loop enough cycles to drain everything the inventory can supply.
+            int affordable = bcc$affordableSets(menu, player, recipe);
+            int cycles = RecipeClickPolicy.placeAllCycles(affordable, bcc$minIngredientStackSize(recipe));
             bcc$reentrant = true;
             try {
-                // 1) Re-fill the grid with as many ingredient sets as the inventory allows (vanilla placeAll).
-                self.handlePlaceRecipe(containerId, recipe, true);
-                // 2) Quick-move the result once. doClick loops quickMoveStack until the grid is depleted,
-                //    so this crafts every set we just placed.
-                self.handleInventoryMouseClick(
-                        containerId, RESULT_SLOT_INDEX, mouseButton, ClickType.QUICK_MOVE, player);
+                for (int i = 0; i < cycles; i++) {
+                    // 1) Re-fill the grid with as many ingredient sets as the inventory allows (placeAll).
+                    self.handlePlaceRecipe(containerId, recipe, true);
+                    // 2) Quick-move the result once. doClick loops quickMoveStack until the grid is
+                    //    depleted, so this crafts every set we just placed.
+                    self.handleInventoryMouseClick(
+                            containerId, RESULT_SLOT_INDEX, mouseButton, ClickType.QUICK_MOVE, player);
+                }
             } finally {
                 bcc$reentrant = false;
             }
             if (BedrockCraftingControls.DEBUG) {
                 BedrockCraftingControls.LOGGER.debug(
-                        "[BCC] shift-click output -> bulk-placed + crafted max (container {}, menu {})",
+                        "[BCC] shift-click output -> crafted max ({} placeAll cycles, container {}, menu {})",
+                        cycles,
                         containerId,
                         menu.getClass().getSimpleName());
             }
@@ -274,5 +281,41 @@ public abstract class MultiPlayerGameModeMixin {
         return level.getRecipeManager()
                 .getRecipeFor(RecipeType.CRAFTING, CraftingInput.of(dim, dim, grid), level)
                 .orElse(null);
+    }
+
+    /**
+     * How many sets of {@code recipe} can be crafted right now — counting the main inventory <em>and</em>
+     * the loaded grid, exactly like the server's {@code ServerPlaceRecipe} availability check
+     * ({@code fillStackedContents} + {@code fillCraftSlotsStackedContents}). Used to bound feature 1's
+     * loop and to size feature 2's place-all cycles.
+     */
+    @Unique
+    private int bcc$affordableSets(AbstractContainerMenu menu, Player player, RecipeHolder<?> recipe) {
+        StackedContents contents = new StackedContents();
+        player.getInventory().fillStackedContents(contents);
+        if (menu instanceof RecipeBookMenu<?, ?> recipeBookMenu) {
+            recipeBookMenu.fillCraftSlotsStackedContents(contents);
+        }
+        return contents.getBiggestCraftableStack(recipe, null);
+    }
+
+    /**
+     * The limiting per-cycle craft count for {@code recipe}: vanilla's place-all fills each ingredient
+     * slot with at most one stack, so one place-all crafts at most the smallest ingredient's max stack
+     * size worth of sets. Defaults to 64 (the usual max stack) when a recipe exposes no ingredients.
+     */
+    @Unique
+    private int bcc$minIngredientStackSize(RecipeHolder<?> recipe) {
+        int min = 64;
+        for (Ingredient ingredient : recipe.value().getIngredients()) {
+            if (ingredient.isEmpty()) {
+                continue;
+            }
+            ItemStack[] items = ingredient.getItems();
+            if (items.length > 0) {
+                min = Math.min(min, items[0].getMaxStackSize());
+            }
+        }
+        return Math.max(1, min);
     }
 }

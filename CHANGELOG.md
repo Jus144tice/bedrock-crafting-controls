@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **Shift-click the output now drains your whole inventory in one click.** Vanilla's "place all" only
+  fills the grid with a stack per ingredient slot, so a single placeAll+craft topped out at ~64 sets —
+  e.g. with 128 oak logs you'd craft 256 planks and have to click again for the rest. The mod now
+  repeats place-all `ceil(affordableSets / perCycleStack)` times (`RecipeClickPolicy#placeAllCycles`,
+  pure/unit-tested) to craft everything available. Availability now counts the loaded grid too (not
+  just the main inventory), via `RecipeBookMenu#fillCraftSlotsStackedContents`, matching the server.
+
 ### Changed
 - **Shift-click-a-recipe now stops as soon as your materials run out.** The craft count is capped to
   the sets your inventory can actually supply (`StackedContents#getBiggestCraftableStack`, the same

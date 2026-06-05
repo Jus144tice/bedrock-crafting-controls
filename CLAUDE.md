@@ -60,11 +60,14 @@ CraftingInput.of(w, h, gridItems), level)`). So they work for a hand-filled grid
 (whose grid is inventory-backed). If nothing matches, they fall through to vanilla.
 
 **Feature 2 — `handleInventoryMouseClick` QUICK_MOVE branch (`shouldCraftMaxOnOutput`).** When the
-result slot (index 0) is shift-clicked on an affected menu (recipe resolved from the grid):
-1. `handlePlaceRecipe(id, recipe, true)` → server re-fills the grid with as many sets as the
-   inventory allows, then
+result slot (index 0) is shift-clicked on an affected menu (recipe resolved from the grid), we loop
+`RecipeClickPolicy#placeAllCycles(affordable, perCycleCap)` times:
+1. `handlePlaceRecipe(id, recipe, true)` → server re-fills the grid with as many sets as fit, then
 2. `handleInventoryMouseClick(id, 0, 0, QUICK_MOVE, player)` → `AbstractContainerMenu#doClick` loops
    `quickMoveStack` until the grid is depleted, crafting everything just placed.
+One place-all only fills a stack per ingredient slot (≈64 sets), so the loop is what drains a large
+inventory in one click. `affordable` = `bcc$affordableSets` (inventory **+** loaded grid, mirroring
+the server); `perCycleCap` = `bcc$minIngredientStackSize` (the limiting ingredient's max stack).
 
 **Feature 3 — `handleInventoryMouseClick` PICKUP branch (`shouldRefillGridOnOutputClick`).** When the
 result slot is **normal-clicked** (not shift) (recipe resolved from the grid):
@@ -149,7 +152,8 @@ after a Gradle sync. The hook points below were verified this way.
 | `doClick` QUICK_MOVE loop | `net.minecraft.world.inventory.AbstractContainerMenu` | one shift-click on the result loops `quickMoveStack` until the grid is depleted → crafts all sets in the grid |
 | `doClick` PICKUP result branch | `net.minecraft.world.inventory.AbstractContainerMenu` | clicking the result with a matching cursor does `cursor.grow(maxStack - count)` → vanilla already accumulates onto the cursor; feature 3 only re-stocks the grid so this can repeat |
 | `getRecipeFor(RecipeType, RecipeInput, Level)` | `net.minecraft.world.item.crafting.RecipeManager` (client: `Level#getRecipeManager`) | resolve the recipe from grid contents (`CraftingInput.of(w, h, slots)`) for features 2 & 3; works on the client since recipes are synced |
-| `getBiggestCraftableStack(RecipeHolder, IntList)` | `net.minecraft.world.entity.player.StackedContents` (fill via `Inventory#fillStackedContents`) | count how many sets the inventory can craft → caps feature 1's loop; client-usable, counts the main inventory only |
+| `getBiggestCraftableStack(RecipeHolder, IntList)` | `net.minecraft.world.entity.player.StackedContents` (fill via `Inventory#fillStackedContents` + `RecipeBookMenu#fillCraftSlotsStackedContents`) | count how many sets are craftable → caps feature 1's loop and sizes feature 2's cycles; client-usable. **Counts inventory + grid** (mirror the server, which adds the craft slots) |
+| `placeAll` per-slot cap | `net.minecraft.recipebook.ServerPlaceRecipe#handleRecipeClicked` | one place-all fills each ingredient slot with ≤ one stack, so it crafts ≤ `min(affordable, minIngredientStack)` sets — why feature 2 loops |
 | `recipeClicked` `canCraft` gate | `net.minecraft.recipebook.ServerPlaceRecipe` | proves placement is all-or-nothing: missing an ingredient → `clearGrid()` + ghost, never a partial set (why the loop is safe) |
 | `RESULT_SLOT = 0` | `net.minecraft.world.inventory.CraftingMenu` / `InventoryMenu` | result slot index (both = 0) |
 | `handlePlaceRecipe(..., Screen.hasShiftDown())` call site | `net.minecraft.client.gui.screens.recipebook.RecipeBookComponent` | proves shift maps to the bool arg |

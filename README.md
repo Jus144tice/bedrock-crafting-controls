@@ -65,10 +65,14 @@ currently form a complete recipe, they fall back to plain vanilla.
 
 **Shift-click the output → craft max:**
 
-1. Re-fills the grid with as many sets as your inventory allows (the vanilla "place all" placement),
-   using the recipe currently in the grid, then
+1. Re-fills the grid with as many sets as fit (the vanilla "place all" placement), using the recipe
+   currently in the grid, then
 2. Shift-clicks the **result slot once** — vanilla's quick-move loops until the grid is empty, so it
    crafts every set just placed.
+
+One "place all" only fills the grid with a stack per ingredient slot (so ~64 sets at a time), so the
+mod repeats that pair as many times as needed to **drain everything your inventory can supply** — one
+click empties the materials, instead of stopping after the first ~64.
 
 **Normal-click the output → craft to cursor, repeatedly:**
 

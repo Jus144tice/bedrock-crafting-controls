@@ -82,6 +82,25 @@ public final class RecipeClickPolicy {
     }
 
     /**
+     * How many "place all + craft" cycles it takes to drain {@code affordableSets}. Vanilla's place-all
+     * fills the grid with at most one stack per ingredient slot, so a single cycle crafts at most
+     * {@code perCycleSets} sets (the smallest ingredient's max stack size). Feature 2 (shift-click the
+     * output) loops this many times so one click crafts the inventory dry, instead of stopping at one
+     * grid's worth (~64). Returns {@code 0} when nothing is affordable.
+     *
+     * @param affordableSets how many sets the inventory (plus the loaded grid) can craft
+     * @param perCycleSets the per-cycle ceiling (a stack per slot — the limiting ingredient's max stack)
+     * @return the number of place-all cycles to run; {@code ceil(affordableSets / perCycleSets)}
+     */
+    public static int placeAllCycles(int affordableSets, int perCycleSets) {
+        if (affordableSets <= 0) {
+            return 0;
+        }
+        int cap = Math.max(1, perCycleSets);
+        return (affordableSets + cap - 1) / cap; // ceil(affordableSets / cap)
+    }
+
+    /**
      * Decide whether a click on the crafting <em>output</em> slot should be intercepted and turned
      * into a Bedrock-style "craft as many as the inventory allows" (re-fill the grid from inventory,
      * then craft everything in it). Vanilla only crafts whatever sets already sit in the grid.
